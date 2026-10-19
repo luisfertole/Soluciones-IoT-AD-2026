@@ -1,6 +1,11 @@
-DB_HOST = "instancia-rds-iot.cm8ynkstodj8.us-east-1.rds.amazonaws.com"
-DB_PORT = 3306
-DB_NAME = "vehiculo_iot"
-DB_USER = "admin"
-DB_PASSWORD = "Admin1234#"
-API_KEY = "ADzNWgw_mWz96dyBMv2rZAdnKKsYzoD8WQP1wQNSarI"
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+DB_HOST = os.getenv("DB_HOST")
+DB_PORT = int(os.getenv("DB_PORT", "3306"))
+DB_NAME = os.getenv("DB_NAME")
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+API_KEY = os.getenv("API_KEY")
