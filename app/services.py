@@ -110,3 +110,31 @@ class VehicleService:
     @staticmethod
     def eliminar_movimiento_demo(id_demo_movimiento):
         return VehicleService.ejecutar_sp('sp_eliminar_movimiento_demo', (id_demo_movimiento,), fetch=False, commit=True)
+    # Pega estos DOS métodos dentro de la clase VehicleService (app/services.py),
+# justo debajo de ejecutar_sp. El resto del archivo NO cambia.
+
+    @staticmethod
+    def ejecutar_transaccion(operaciones):
+        """Ejecuta varios SP en una sola conexión y un solo commit.
+        Si alguno falla, se hace rollback y no queda nada a medias."""
+        connection = DatabaseConnection.get_connection()
+        try:
+            with connection.cursor() as cursor:
+                for sp_name, args in operaciones:
+                    cursor.callproc(sp_name, args)
+                    while cursor.nextset():  # descarta result sets pendientes
+                        pass
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
+    # --- MOVIMIENTO INDIVIDUAL: estado + historial en UNA transacción ---
+    @staticmethod
+    def registrar_movimiento(id_vehiculo, id_comando, origen):
+        return VehicleService.ejecutar_transaccion([
+            ('sp_actualizar_estado', (id_vehiculo, id_comando, True)),
+            ('sp_registrar_historial', (id_vehiculo, id_comando, origen)),
+        ])
