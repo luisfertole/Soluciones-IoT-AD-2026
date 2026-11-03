@@ -3,6 +3,7 @@ import logging
 
 from app.services import VehicleService
 from app.websockets import manager
+from app.control import hub
 
 log = logging.getLogger("iot.demos")
 
@@ -64,7 +65,10 @@ class DemoRunner:
                     "duracion_ms": mov["duracion_ms"],
                     "pausa_ms": mov["pausa_ms"],
                 })
-                await asyncio.sleep((mov["duracion_ms"] + mov["pausa_ms"]) / 1000.0)
+                await hub.demo_paso(id_vehiculo, mov["comando"], True)
+                await asyncio.sleep(mov["duracion_ms"] / 1000.0)
+                await hub.demo_paso(id_vehiculo, mov["comando"], False)
+                await asyncio.sleep(mov["pausa_ms"] / 1000.0)
 
             estado = await asyncio.to_thread(VehicleService.obtener_estado, id_vehiculo)
             await manager.broadcast_to_vehicle(id_vehiculo, {
@@ -74,6 +78,7 @@ class DemoRunner:
                 "estado": estado,
             })
         except asyncio.CancelledError:
+            await hub.detener_todo(id_vehiculo)
             await manager.broadcast_to_vehicle(id_vehiculo, {
                 "tipo": "DEMO_CANCELADA",
                 "id_vehiculo": id_vehiculo,
@@ -81,6 +86,7 @@ class DemoRunner:
             })
             raise
         except Exception:
+            await hub.detener_todo(id_vehiculo)
             log.exception("Error ejecutando la DEMO %s del vehículo %s", id_demo, id_vehiculo)
             await manager.broadcast_to_vehicle(id_vehiculo, {
                 "tipo": "DEMO_ERROR",

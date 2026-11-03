@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unidad 02 · Control del carrito</title>
+<style>
+:root{--bg:#0d0a0a;--panel:#1b1717;--metal:#8c8480;--rojo:#d4210f;--naranja:#ff7a00;--tx:#ece4df}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 Bahnschrift,"Arial Narrow",sans-serif;
+ background-image:repeating-linear-gradient(135deg,#ffffff06 0 2px,transparent 2px 14px);min-height:100vh;padding:14px}
+h1{margin:0;font-size:1.9rem;letter-spacing:.04em;font-weight:700}
+h1 b{color:var(--naranja)}
+h2{margin:0 0 8px;font-size:1rem;color:var(--naranja);font-weight:600;letter-spacing:.06em}
+header{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;
+ border-left:10px solid var(--rojo);padding-left:12px;margin-bottom:14px}
+.luces{display:flex;gap:18px}
+.luz{display:flex;align-items:center;gap:7px;color:var(--metal)}
+.luz i{width:14px;height:14px;background:#3a3333;clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%)}
+.luz.on{color:var(--tx)}.luz.on i{background:var(--naranja);box-shadow:0 0 10px var(--naranja)}
+.grid{display:grid;grid-template-columns:minmax(230px,1fr) minmax(320px,1.6fr) minmax(230px,1fr);gap:14px}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+.p{background:var(--panel);padding:14px 16px;clip-path:polygon(0 0,calc(100% - 18px) 0,100% 18px,100% 100%,18px 100%,0 calc(100% - 18px));border:1px solid #ffffff10}
+input,select,button{font:inherit;color:var(--tx);background:#120f0f;border:1px solid var(--metal);padding:8px 10px;width:100%;margin-bottom:8px}
+button{cursor:pointer;background:#2a2626;border-color:var(--naranja)}
+button:hover{background:#3a3030}
+:focus-visible{outline:2px solid var(--naranja);outline-offset:2px}
+.teclado{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;touch-action:none;user-select:none}
+.k{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#120f0f;
+ border:1px solid var(--metal);clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px);
+ font-size:1.6rem;font-weight:700;cursor:pointer}
+.k small{font-size:.7rem;font-weight:400;color:var(--metal)}
+.k.on{background:var(--rojo);border-color:var(--naranja);color:#fff;box-shadow:0 0 16px var(--rojo) inset}
+.k.on small{color:#fff}
+.fila{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px}
+.fila .k{aspect-ratio:auto;padding:10px 0;font-size:1.1rem}
+#emerg{background:var(--rojo);border:2px solid var(--naranja);font-size:1.2rem;font-weight:700;padding:14px;margin-top:10px}
+#estado,#log{font:12.5px/1.5 Consolas,monospace;color:#d8cfc9}
+#log{height:170px;overflow:auto;white-space:pre-wrap;background:#0d0a0a;padding:8px}
+.err{color:#ff6a55}.ok{color:var(--naranja)}
+.ayuda{color:var(--metal);font-size:.85rem}
+</style>
+</head>
+<body>
+<header>
+ <h1>Unidad 02 <b>Control del carrito</b></h1>
+ <div class="luces">
+  <span class="luz" id="l-srv"><i></i>Servidor</span>
+  <span class="luz" id="l-esp"><i></i>ESP8266</span>
+ </div>
+</header>
+
+<div class="grid">
+ <section class="p">
+  <h2>Conexión</h2>
+  <label for="clave">Clave de la API (solo se guarda en memoria)</label>
+  <input id="clave" type="password" autocomplete="off">
+  <label for="veh">Vehículo</label>
+  <select id="veh"></select>
+  <button id="conectar">Conectar</button>
+  <h2>Demostraciones</h2>
+  <select id="demo"></select>
+  <button id="btn-demo">Ejecutar demo (X)</button>
+  <h2>Estado del vehículo</h2>
+  <div id="estado">Sin datos</div>
+ </section>
+
+ <section class="p">
+  <h2>Mando</h2>
+  <div class="teclado" id="teclado"></div>
+  <div class="fila" id="extras"></div>
+  <button id="emerg">Parada de emergencia (Espacio)</button>
+  <p class="ayuda">Mantén presionada una tecla para mover y suelta para detener. Puedes combinar varias. Al cambiar de pestaña o perder el foco, todo se detiene.</p>
+ </section>
+
+ <section class="p">
+  <h2>Consola de eventos</h2>
+  <div id="log" aria-live="polite"></div>
+  <h2 style="margin-top:12px">Historial reciente</h2>
+  <div id="hist" class="ayuda">Sin datos</div>
+ </section>
+</div>
+
+<script>
+const MOV = [["KeyQ","GIRAR_IZQUIERDA","Q","Giro izq."],["KeyW","AVANZAR","W","Avanzar"],["KeyE","GIRAR_DERECHA","E","Giro der."],["KeyR","LEVANTAR","R","Levantar"],
+ ["KeyA","IZQUIERDA","A","Izquierda"],["KeyS","RETROCEDER","S","Retroceder"],["KeyD","DERECHA","D","Derecha"],["KeyF","BAJAR","F","Bajar"]];
+const EXT = [["Digit1","ENCENDER_APAGAR","1","Encender"],["Digit2","LUCES","2","Luces"],["Digit3","SONIDO","3","Sonido"],["KeyX","DEMO","X","Demo"]];
+const TECLAS = {}; // e.code -> {accion, pulso}
+const $ = id => document.getElementById(id);
+const proto = location.protocol === "https:" ? "wss:" : "ws:";
+let clave = "", vid = null, wsCtl = null, wsMon = null, hbTimer = null, retry = null, demoActiva = false;
+const activas = new Set();
+
+function log(t, cls) {
+  const d = document.createElement("div"); if (cls) d.className = cls;
+  d.textContent = new Date().toLocaleTimeString() + "  " + t;
+  $("log").appendChild(d); while ($("log").children.length > 200) $("log").firstChild.remove();
+  $("log").scrollTop = 1e9;
+}
+const luz = (id, on) => $(id).classList.toggle("on", on);
+const api = (ruta, metodo = "GET") => fetch(ruta, {method: metodo, headers: clave ? {"X-API-Key": clave} : {}});
+
+function dibujar() {
+  const mk = (lista, cont, pulso) => lista.forEach(([code, accion, tecla, nombre]) => {
+    const b = document.createElement("div"); b.className = "k"; b.id = "k-" + accion; b.tabIndex = 0;
+    b.innerHTML = tecla + "<small>" + nombre + "</small>"; cont.appendChild(b);
+    TECLAS[code] = {accion, pulso};
+    b.addEventListener("pointerdown", e => { b.setPointerCapture(e.pointerId); presionar(accion, pulso); });
+    ["pointerup", "pointercancel"].forEach(ev => b.addEventListener(ev, () => soltar(accion, pulso)));
+  });
+  mk(MOV, $("teclado"), false); mk(EXT, $("extras"), true);
+  $("extras").querySelectorAll(".k").forEach(k => k.style.fontSize = "1.1rem");
+}
+
+function enviar(o) { if (wsCtl && wsCtl.readyState === 1) wsCtl.send(JSON.stringify(o)); }
+function pintar(accion, on) { const k = $("k-" + accion); if (k) k.classList.toggle("on", on); }
+
+function presionar(accion, pulso) {
+  if (accion === "DEMO") return alternarDemo();
+  if (activas.has(accion) && !pulso) return;          // ignora keydown repetido
+  if (pulso) { enviar({tipo: "PULSO", accion}); pintar(accion, true); setTimeout(() => pintar(accion, false), 250); return; }
+  activas.add(accion); pintar(accion, true); enviar({tipo: "MOVER", accion, activo: true});
+}
+function soltar(accion, pulso) {
+  if (pulso || !activas.has(accion)) return;
+  activas.delete(accion); pintar(accion, false); enviar({tipo: "MOVER", accion, activo: false});
+}
+function soltarTodo() {
+  [...activas].forEach(a => pintar(a, false)); activas.clear(); enviar({tipo: "DETENER_TODO"});
+}
+function emergencia() {
+  soltarTodo(); enviar({tipo: "EMERGENCIA"});
+  if (vid) api(`/vehiculos/${vid}/emergencia`, "POST").catch(() => {});   // vía redundante por REST
+  log("PARADA DE EMERGENCIA", "err");
+}
+
+addEventListener("keydown", e => {
+  if (["INPUT", "SELECT"].includes(document.activeElement.tagName)) return;
+  if (e.code === "Space" || e.code === "Escape") { e.preventDefault(); if (!e.repeat) emergencia(); return; }
+  const t = TECLAS[e.code]; if (!t) return;
+  e.preventDefault(); if (e.repeat) return; presionar(t.accion, t.pulso);
+});
+addEventListener("keyup", e => { const t = TECLAS[e.code]; if (t) soltar(t.accion, t.pulso); });
+addEventListener("blur", soltarTodo);
+document.addEventListener("visibilitychange", () => { if (document.hidden) soltarTodo(); });
+
+async function alternarDemo() {
+  const d = $("demo").value; if (!vid || !d) return log("Selecciona un vehículo y una demo", "err");
+  const r = demoActiva ? await api(`/vehiculos/${vid}/demos/cancelar`, "POST")
+                       : await api(`/vehiculos/${vid}/demos/${d}/ejecutar`, "POST");
+  if (!r.ok) log("Demo: " + ((await r.json()).detail || r.status), "err");
+}
+
+function conectarControl() {
+  clearTimeout(retry);
+  wsCtl = new WebSocket(`${proto}//${location.host}/ws/control/${vid}`);
+  wsCtl.onopen = () => { wsCtl.send(JSON.stringify({tipo: "AUTH", clave})); luz("l-srv", true);
+    hbTimer = setInterval(() => enviar({tipo: "HB"}), 500); };
+  wsCtl.onmessage = ev => { const m = JSON.parse(ev.data);
+    if (m.tipo === "CONTROL_LISTO") { luz("l-esp", m.dispositivo); log("Control listo"); }
+    if (m.tipo === "ERROR") log(m.mensaje, "err"); };
+  wsCtl.onclose = ev => { clearInterval(hbTimer); luz("l-srv", false); activas.forEach(a => pintar(a, false)); activas.clear();
+    log("Canal de control cerrado", "err");
+    if (ev.code !== 1008 && clave) retry = setTimeout(conectarControl, 2000); };   // no restaura movimientos
+}
+function conectarMonitor() {
+  wsMon = new WebSocket(`${proto}//${location.host}/ws/vehiculos/${vid}`);
+  wsMon.onmessage = ev => { const m = JSON.parse(ev.data);
+    if (m.tipo === "DISPOSITIVO_CONECTADO") luz("l-esp", true);
+    if (m.tipo === "DISPOSITIVO_DESCONECTADO") luz("l-esp", false);
+    if (m.tipo === "DEMO_INICIADA") { demoActiva = true; $("btn-demo").textContent = "Cancelar demo (X)"; }
+    if (["DEMO_FINALIZADA", "DEMO_CANCELADA", "DEMO_ERROR", "EMERGENCIA"].includes(m.tipo)) { demoActiva = false; $("btn-demo").textContent = "Ejecutar demo (X)"; }
+    if (m.estado) $("estado").textContent = Object.entries(m.estado).map(([k, v]) => k + ": " + v).join("\n");
+    if (m.tipo !== "ESTADO_DISPOSITIVO") log(m.tipo + (m.comando ? " " + m.comando : "") + (m.mensaje ? " " + m.mensaje : ""), m.tipo.includes("ERROR") ? "err" : "ok");
+    if (m.tipo === "MOVIMIENTO_INDIVIDUAL") historial(); };
+  wsMon.onclose = () => setTimeout(() => vid && conectarMonitor(), 2000);
+}
+async function historial() {
+  const r = await fetch(`/vehiculos/${vid}/historial`); if (!r.ok) return;
+  const j = await r.json();
+  $("hist").textContent = j.historial.map(h => `${h.fecha_hora}  ${h.comando}  ${h.origen}`).join("\n");
+  $("hist").style.whiteSpace = "pre-wrap";
+}
+async function cargarDemos() {
+  const r = await fetch(`/vehiculos/${vid}/demos`); if (!r.ok) return;
+  $("demo").innerHTML = ""; (await r.json()).forEach(d => $("demo").add(new Option(d.nombre || ("Demo " + d.id_demo), d.id_demo)));
+}
+
+$("conectar").onclick = () => {
+  clave = $("clave").value; vid = $("veh").value;
+  if (!clave || !vid) return log("Escribe la clave y elige un vehículo", "err");
+  $("clave").value = ""; conectarControl(); conectarMonitor(); cargarDemos(); historial();
+};
+$("btn-demo").onclick = alternarDemo; $("emerg").onclick = emergencia;
+dibujar();
+fetch("/vehiculos").then(r => r.json()).then(v => v.forEach(x => $("veh").add(new Option(x.nombre || ("Vehículo " + x.id_vehiculo), x.id_vehiculo))));
+</script>
+</body>
+</html>

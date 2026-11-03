@@ -13,12 +13,23 @@ from app.schemas import (ComandoIn, ComandoUpdate, DemoIn, DemoUpdate,
 from app.security import verificar_api_key
 from app.services import VehicleService
 from app.websockets import manager
+from contextlib import asynccontextmanager
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
+from app.control import hub, router as control_router
 
 log = logging.getLogger("iot.api")
+
+@asynccontextmanager
+async def lifespan(app):
+    hub.iniciar()
+    yield
+    await hub.detener()
 
 app = FastAPI(
     title="API Vehículo IoT",
     version="1.1.0",
+    lifespan=lifespan,
     description=(
         "API de control de vehículos IoT. Los GET son públicos; los POST, PUT y DELETE "
         "requieren el header `X-API-Key` (botón **Authorize**). "
@@ -359,3 +370,6 @@ async def websocket_endpoint(websocket: WebSocket, id_vehiculo: int):
         pass
     finally:
         manager.disconnect(websocket, id_vehiculo)
+
+app.include_router(control_router)
+app.mount("/control", StaticFiles(directory=Path(__file__).parent / "web", html=True), name="control")
